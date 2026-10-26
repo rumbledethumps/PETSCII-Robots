@@ -1,0 +1,59 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "RP6502-EMU",
+            "type": "lldb-dap",
+            "request": "launch",
+            "debugAdapterExecutable": "${command:cmake.launchTargetDirectory}/rp6502-emu",
+            "debugAdapterArgs": [
+                "--dap",
+                "--ini",
+                "${workspaceFolder}/.rp6502"
+            ],
+            "windows": {
+                "debugAdapterExecutable": "${command:cmake.launchTargetDirectory}/rp6502-emu.exe"
+            },
+            "program": "${command:cmake.launchTargetPath}.rp6502",
+            "args": [],
+            "stopOnEntry": false,
+            "stopOnExit": true
+        },
+        {
+            "name": "RP6502-PICO",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "program": "${workspaceFolder}/tools/rp6502.py",
+            "args": [
+                "run",
+                "-c",
+                "${workspaceFolder}/.rp6502",
+                "${command:cmake.launchTargetPath}.rp6502"
+            ],
+        },
+        {
+            "name": "RP6502-WEB",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "internalConsole",
+            "module": "http.server",
+            "args": [
+                "--bind",
+                "127.0.0.1",
+                "--directory",
+                "${command:cmake.buildDirectory}/web",
+                "0"
+            ],
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            },
+            "preLaunchTask": "CMake: build",
+            "serverReadyAction": {
+                "pattern": "\\((https?://\\S+)\\)",
+                "uriFormat": "%s",
+                "action": "openExternally"
+            },
+        },
+    ]
+}
