@@ -1,0 +1,60 @@
+# Unit AI: the whole of BACKGROUND_TASKS.ASM, all 24 unit types, running as
+# David Murray's own instructions.
+#
+# The probe carries a checksum over every live unit's type and position, so
+# "the AI is running" is a peek rather than a screenshot. The RNG starts from
+# zero at power-on and is never reseeded, as in 2.1, and the emulator is
+# deterministic, so the values are exact: change an AI routine and they move,
+# which is the point.
+#
+# The checkpoints are announced by the ROM at known tick numbers rather than
+# measured with `run` from the boot message. Loading the assets goes through the
+# host filesystem and does not take the same number of frames everywhere, so
+# counting from the boot message asserts partly on the host.
+#
+# Slot 0 is the player and has no AI. The dispatcher walks slots 1..63,
+# decrements each unit's timer, and runs its routine when the timer reaches zero.
+
+# Start the game from the intro menu. START GAME is the first option, so space
+# is enough; the tests that care about the menu itself drive it further.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_AI60
+
+# 16 live robots in level-a, and nothing drawn over the terrain: the player
+# starts 25 tiles from the nearest one.
+peek xram:XRAM_PROBE+PROBE_ROBOTS $10
+peek xram:XRAM_PROBE+PROBE_UNITS_LO $A3 $40 $00
+
+# The hoverbots patrol, so the checksum moves.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_AI300
+peek xram:XRAM_PROBE+PROBE_UNITS_LO $9F $4F $00
+
+# Health is untouched at 12: nothing has reached the player yet.
+peek xram:XRAM_PROBE+PROBE_HEALTH $0C
+
+# Walk right and then up, each leg held long enough to reach a wall rather than
+# long enough for a fixed number of key repeats. The old form pressed for 120
+# frames and checked where he had got to, which measured the frame rate as much
+# as the collision -- it changed the moment the tile blitter got faster. A stop
+# is a property of the map and does not.
+#
+# Right until he stops: tile 47 at 46,38 blocks him at x=45. Then up until he
+# stops: tile 5 at 45,24 blocks him at y=25. Both are open ground the whole way
+# there, tile 9.
+press l
+run 400
+release l
+run 10
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $2D $26
+press i
+run 400
+release i
+run 10
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $2D $19
+
+shot "ai.png"

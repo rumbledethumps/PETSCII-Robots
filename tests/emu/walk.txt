@@ -1,0 +1,47 @@
+# Walking and collision, which are David Murray's REQUEST_WALK_* running as the
+# original instructions rather than a transliteration of them.
+#
+# level-a starts the player at 22,38 on open ground. Twelve squares to his left
+# the map turns to water: tile 204, attribute $12, which is hoverable and
+# see-through but not walkable. So walking left has to stop at x=15 and stay
+# there however long the key is held -- that is the assertion worth having,
+# because it exercises GET_TILE_FROM_MAP's address arithmetic, the
+# (attrib & MOVE_TYPE) == MOVE_TYPE test, and CHECK_FOR_UNIT together.
+
+# Start the game from the intro menu. START GAME is the first option, so space
+# is enough; the tests that care about the menu itself drive it further.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+
+# 'P','R', playing, level a, player 22,38
+peek xram:XRAM_PROBE $50 $52 $02 $00 $16 $26
+
+# A few squares right, then back. The count depends on the repeat rate the game
+# sets for itself in AFTER_MOVE -- 15 frames before the first repeat and 6 after
+# -- so it moves whenever that changes. What the test is really for is the stop
+# below.
+press l
+run 40
+release l
+run 4
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $1C
+
+# Now left, held far longer than it takes to cross the twelve open squares.
+press j
+run 200
+release j
+run 4
+
+# Stopped at the water's edge, not at the map edge and not past it.
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $0F
+peek xram:XRAM_PROBE+PROBE_PLAYER_Y $26
+
+# The window follows the player: 15-5 = 10, 38-3 = 35.
+peek xram:XRAM_PROBE+PROBE_WINDOW_X $0A $23
+
+shot "walk.png"

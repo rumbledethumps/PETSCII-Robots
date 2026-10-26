@@ -1,0 +1,121 @@
+# Dying, and the screens that follow.
+#
+# plat_game_over has two branches and only the win one had ever been tested. On
+# a death it faces the sprite FACE_DEAD, holds while the world keeps running,
+# then shows the box, the endgame statistics and LOS_MSG. tests/emu/endgame.txt
+# covers the win. The last part quits from the pause, which skips the body and
+# the box and goes straight to the statistics.
+#
+# Three faults were reported here and all three came from one line: this port
+# called BACKGROUND_TASKS inside the waits. The original runs it in GOM0 only --
+# while the body is on screen and whatever killed him is still moving, which is
+# the point -- and nowhere after the box goes up. Running it later left a robot
+# attacking the corpse behind the GAME OVER box and, because BACKGROUND_TASKS
+# redraws the map window whenever REDRAW_WINDOW is set, drew the playfield back
+# over the statistics.
+#
+# The player is killed by writing his unit type, which is what the AI does at
+# the end of INFLICT_DAMAGE. Taking real damage is covered by
+# tests/emu/flash.txt, which is driven by a hazard hitting the player; what
+# needs testing here is what happens afterwards, and a route that walks into a
+# robot cannot test it -- the probe is not refreshed while plat_game_over runs,
+# so a recorded route keeps walking and its keypresses dismiss the very screens
+# under test. See the note in tests/emu/playthrough.py.
+#
+# Names such as UNIT_TYPE and XRAM_PROBE come from robots.sym, which the build
+# writes beside the ROM: RAM symbols move whenever the code above them changes
+# size, and XRAM ones whenever xram_layout_t in src/xram.h changes.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 60
+
+poke UNIT_TYPE $00
+run 60
+
+# GOM0: the body is on screen and the world is still moving, so this is still
+# the playfield rather than the box. The probe was written in the pass that
+# found him dead, before plat_game_over.
+peek xram:XRAM_PROBE+PROBE_STATE $03
+
+# And the body is a unit again, type 1, as 2.1's GAME_OVER makes it ($53EE),
+# so the robots bump it rather than walk onto it. The nearest robot is 25
+# squares away, so nothing hits it again in these 60 ticks.
+peek UNIT_TYPE $01
+
+# GOM2: the box. Three rows at column 11 of rows 9 to 11; row 10 is the words,
+# in the Amiga's text green ($8A: black behind colour 10).
+run 120
+peek xram:XRAM_CHARS+10*SCR_STRIDE+11*2 $5D $8A $07 $8A $01 $8A $0D $8A $05 $8A $20 $8A $0F $8A $16 $8A $05 $8A $12 $8A $5D $8A
+
+# Once GOM0 is over the ending goes back into his type, so the menu reports a
+# death and not a game still being played.
+peek UNIT_TYPE $00
+
+# And it stays. Five seconds with nothing pressed: the wait has to be a wait,
+# not something the next thing to happen scrolls past.
+run 300
+peek xram:XRAM_CHARS+10*SCR_STRIDE+11*2 $5D $8A $07 $8A $01 $8A $0D $8A $05 $8A $20 $8A $0F $8A $16 $8A $05 $8A $12 $8A $5D $8A
+
+# One key, and the statistics over the Amiga's game-over picture. "you lose!"
+# at row 3 from column 16, in its colour 4.
+press space
+run 8
+release space
+run 120
+peek xram:XRAM_CHARS+3*SCR_STRIDE+16*2 $19 $84 $0F $84 $15 $84 $20 $84 $0C $84 $0F $84 $13 $84 $05 $84 $21 $84
+
+# Which also stays, rather than flashing past on the same keypress that got
+# here -- GOM5 drains what is waiting before it waits for something new.
+run 300
+peek xram:XRAM_CHARS+3*SCR_STRIDE+16*2 $19 $84 $0F $84 $15 $84 $20 $84 $0C $84 $0F $84 $13 $84 $05 $84 $21 $84
+
+# And the last key returns to the intro, which reports the death.
+press space
+run 8
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU 400
+peek xram:XRAM_PROBE+PROBE_STATE $03
+
+# Y in the pause quits straight to the statistics as a loss: 2.1's PG6 is
+# STZ TEMP_D / JMP GOM4 ($46B5), with no box, no GOM0 and no AI. A big
+# explosion's shake is left set, as a quit in the middle of a blast leaves it.
+run 30
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 60
+poke SCREEN_SHAKE $01
+press escape
+run 6
+release escape
+run 10
+press y
+run 6
+release y
+
+# The statistics and "you lose!" after the fade out, the picture and the text,
+# where GOM0's 100 ticks and the box would still be on screen.
+run 120
+peek xram:XRAM_CHARS+3*SCR_STRIDE+16*2 $19 $84 $0F $84 $15 $84 $20 $84 $0C $84 $0F $84 $13 $84 $05 $84 $21 $84
+
+# Back at the intro the probe reports the quit as a death.
+press space
+run 8
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU 400
+peek xram:XRAM_PROBE+PROBE_STATE $03
+
+# And the next level does not shake. init_game clears SCREEN_SHAKE, which only
+# GOM0 used to, once the blast had ended.
+run 30
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+peek SCREEN_SHAKE $00

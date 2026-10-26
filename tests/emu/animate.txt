@@ -1,0 +1,89 @@
+# The tile animations: ANIMATE_WATER, from the AI tick, as X16 2.1 runs it.
+#
+# Two groups share one thirty-tick timer ($5650): water, the flag and the
+# server room light step when it runs out, and the trash compactor and the
+# HVAC fans fifteen ticks later. Their frames are the Amiga's, and they stay in
+# XRAM: a step moves every animated cell of the group on to the next frame,
+# and nothing is loaded. tests/emu/render.py checks every frame of every
+# animated cell in a window, and tests/emu/effects.py the two groups' timing
+# and the pause; this checks that the timer drives them on its own.
+#
+# level-a starts the player at 22,38 with water twelve squares to his left.
+# Walking there puts water, tile 204, in window cell (1,0), so the first tile
+# sprite. Water has four frames, the Amiga's 20 to 23.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 60
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+press j
+run 8
+release j
+run 6
+run 40
+
+# Each frame for thirty ticks, then the next, and after four the first again.
+# The timer has been running since the first game began, and is never reset,
+# so its phase here depends on how many ticks the walk took. Waiting for the
+# first frame to arrive and then going fifteen frames on puts every peek below
+# in the middle of a step rather than on its edge.
+let water = XRAM_PF+1*10+4
+let frame0 = XRAM_ANIM+20*288
+wait xram:water frame0&255 130
+run 15
+peek xram:water frame0&255 frame0>>8
+run 30
+peek xram:water (frame0+288)&255 (frame0+288)>>8
+run 30
+peek xram:water (frame0+2*288)&255 (frame0+2*288)>>8
+run 30
+peek xram:water (frame0+3*288)&255 (frame0+3*288)>>8
+run 30
+peek xram:water frame0&255 frame0>>8

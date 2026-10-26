@@ -1,0 +1,60 @@
+# Key repeat with more than one key down.
+#
+# The RIA gives a bit array of the keys currently held, not a stream of events,
+# so src/input.c has to work out presses and repeats itself. Keeping only "the
+# key being repeated" is not enough, and getting it wrong is felt immediately:
+# hold down, tap right, let right go, and the player carries on going right
+# while you are still holding down. The key that was released has to stop
+# repeating and whatever is still held has to take over.
+#
+# level-a's start at 22,38 is open ground in both directions, so each leg moves
+# freely and the direction is unambiguous.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 20
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $16 $26
+
+# Hold down: five squares down, none sideways. The count follows the repeat
+# rate the game sets in AFTER_MOVE, 15 frames then 6; the direction is the point.
+press k
+run 40
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $16 $2B
+
+# Add right, keeping down held. The newest key wins, so he goes right.
+press l
+run 40
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $1D $2C
+
+# Let right go. Down is still held, so he goes down again -- and takes over at
+# once rather than after another repeat delay, because waiting reads as the game
+# ignoring a key you never let go of. Before this worked, x ran on to $1F here
+# and y did not move at all.
+release l
+run 40
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $1D $32
+
+# Nothing held, nothing moves. A step already due as the key comes up still
+# lands, so look once it is up, and again later.
+release k
+run 4
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $1D $33
+run 20
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $1D $33
+
+# F2 cycles the item once a press. Held, it does not run on through the items,
+# because the buffer is cleared after it, as on every original.
+poke INV_BOMBS $01
+poke INV_EMP $01
+poke INV_MEDKIT $01
+poke INV_MAGNET $01
+poke SELECTED_ITEM $01
+press f2
+run 60
+release f2
+run 10
+peek SELECTED_ITEM $02

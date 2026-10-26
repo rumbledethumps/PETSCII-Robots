@@ -1,0 +1,55 @@
+# The intro screen: 2.1's title picture, the menu's text over it, and four
+# options that respond. tests/emu/title.py checks what it shows.
+#
+# Note that the harness has to drive this with `press`, not `type`: the game
+# reads the RIA's HID keycode bit array, and `type` goes through the terminal.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 40
+
+# The title screen, with START GAME selected.
+shot "menu.png"
+
+# Down twice to DIFFICULTY, and cycle it. The intro robot's eyes change with
+# the setting: three 16x10 eye strips from 2.1, drawn into the picture.
+# The menu starts at normal, 1.
+press down
+run 6
+release down
+run 10
+press down
+run 6
+release down
+run 10
+peek DIFF_LEVEL $01
+press space
+run 10
+release space
+run 30
+# Normal goes to hard, which DIFF_LEVEL says; tests/emu/title.py checks the
+# eyes each setting draws. Hard is real now: SET_DIFF_LEVEL sets level-a's
+# thirteen hoverbots hunting, and tests/emu/difficulty.py checks what it does
+# to the level.
+peek DIFF_LEVEL $02
+shot "menu_difficulty.png"
+
+# Back to the top and start. The game screen replaces the title, and the level
+# loads.
+press up
+run 6
+release up
+run 10
+press up
+run 6
+release up
+run 10
+press space
+run 6
+release space
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 30
+# Playing, level a, player at 22,38 with full health. The hunting hoverbots
+# cannot have reached him: the nearest starts at 36,27, twenty-five squares
+# away.
+peek xram:XRAM_PROBE $50 $52 $02 $00 $16 $26 $0C

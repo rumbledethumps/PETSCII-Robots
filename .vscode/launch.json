@@ -9,7 +9,9 @@
             "debugAdapterArgs": [
                 "--dap",
                 "--ini",
-                "${workspaceFolder}/.rp6502"
+                "${workspaceFolder}/.rp6502",
+                "--aspect",
+                "16:10"
             ],
             "windows": {
                 "debugAdapterExecutable": "${command:cmake.launchTargetDirectory}/rp6502-emu.exe"

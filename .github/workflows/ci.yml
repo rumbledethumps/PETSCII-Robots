@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Each commit to main gets its own group, so a later push never cancels the
+  # run that reports on an earlier one. Pull request runs replace each other.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # The rp6502 target lives in picocomputer/cc65, not upstream cc65, so CI
+      # builds the same compiler a user installs, with the same script.
+      - name: Install cc65
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/picocomputer/.github/main/install/cc65.sh | sh
+          echo "$HOME/.rp6502/cc65/bin" >> "$GITHUB_PATH"
+
+      # Configure fetches the emulator release that CMakeLists.txt pins. ctest
+      # runs the lot: the converter's byte-identity check against the shipped
+      # X16 binaries, the asset invariants, and the emulator scripts, which run
+      # headless and need no display.
+      - name: Build and test
+        run: cmake --workflow --preset check
+
+      # The web player is a second copy of the ROM, so the ROM is named in full.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: robots
+          path: |
+            build/cc65/release/src/robots/robots.rp6502
+            build/cc65/release/src/robots/robots.sym
+            build/cc65/release/web/robots.zip
+          if-no-files-found: error
+
+      # What the tests saw, for a person to look at.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: screenshots
+          path: build/cc65/release/test/*/*.png
+
+      # Each test folder holds a link to the emulator, which is left out.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-folders
+          path: |
+            build/cc65/release/test/
+            !build/cc65/release/test/**/rp6502-emu
+            build/cc65/release/Testing/Temporary/LastTest.log

@@ -1,3 +1,24 @@
 {
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+
+    // The build is preset-driven; picking a kit by hand gets the toolchain wrong.
+    "cmake.useCMakePresets": "always",
+    "cmake.ctest.testExplorerIntegrationEnabled": true,
+
+    // src is ca65, not C, and treating it as C makes IntelliSense noisy about
+    // every pseudo-op.
+    "files.associations": {
+        "*.s": "ca65",
+        "*.inc": "ca65"
+    },
+
+    // assets/gen is build output; searching it just finds binary noise.
+    "search.exclude": {
+        "assets/gen": true,
+        "build": true
+    },
+    "files.watcherExclude": {
+        "**/assets/gen/**": true,
+        "**/build/**": true
+    }
 }

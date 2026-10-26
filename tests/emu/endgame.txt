@@ -1,0 +1,269 @@
+# Winning a level, and the screens that follow.
+#
+# TRANSPORTER_PAD only makes itself active once every unit in slots 1 to 27 is
+# dead, so winning is a full combat playthrough -- find weapons, find ammunition,
+# clear twenty-odd robots -- and no route can reach it. That left plat_game_over
+# and the endgame statistics with no coverage at all.
+#
+# poke closes it: write the state the game would have reached and let it read it
+# back. UNIT_TYPE[1..27] goes to zero -- every robot dead -- and the
+# pad's own AI notices on its next pass and clears UNIT_A, exactly as it would
+# have after a real fight. Nothing else is faked; the player still walks to the
+# pad and DEMATERIALIZE still runs its eight frames of eight ticks, holding the
+# game up meanwhile, as 2.1's does.
+#
+# level-h because its exit pad at 21,25 is the only one in the eighteen maps
+# reachable without keys. The route was recorded by
+#     tests/emu/playthrough.py h 21 25 --poke "UNIT_TYPE+1 $00 x27"
+# which drives the emulator a step at a time and re-plans from where the player
+# actually is; replayed open loop it is deterministic, because the RNG starts
+# from zero at power-on and is never reseeded, as in 2.1.
+#
+# Names such as UNIT_TYPE and XRAM_PROBE come from robots.sym, which the build
+# writes beside the ROM: RAM symbols move whenever the code above them changes
+# size, and XRAM ones whenever xram_layout_t in src/xram.h changes.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press k
+run 6
+release k
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press i
+run 6
+release i
+run 10
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 20
+poke UNIT_TYPE+1 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00
+run 60
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press j
+run 8
+release j
+run 8
+press j
+run 8
+release j
+run 8
+press j
+run 8
+release j
+run 8
+press j
+run 8
+release j
+run 8
+press j
+run 8
+release j
+run 8
+press j
+run 8
+release j
+run 8
+press j
+run 8
+release j
+run 8
+press i
+run 8
+release i
+run 8
+
+# DEMATERIALIZE finishes and sets the player's own type to 2, which is how the
+# AI signals a win -- 0 is how it signals a death. The main loop sees it and
+# goes to plat_game_over, which does not return until a key is pressed, so the
+# probe stops being refreshed here and there is nothing to peek at yet.
+run 300
+
+# The probe has stopped, but the sprites have not: he has been transported
+# away, so he is not drawn on the pad behind the box. The player is playfield
+# sprite 109 (PF_PLAYER in src/xram.h), and its y is 240, parked below the
+# screen.
+peek xram:XRAM_PF+109*10+2 $F0 $00
+
+# The game-over box, then the statistics screen, then back to the intro: one
+# key for each of the two screens.
+press space
+run 8
+release space
+run 120
+press space
+run 8
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU 400
+
+# Back at the menu with the win still recorded: state 4 is WON, 3 would be DEAD.
+# Reaching the menu at all is the assertion that the whole sequence ran --
+# game-over box, endgame statistics, and the wait for a key on each.
+peek xram:XRAM_PROBE+PROBE_STATE $04

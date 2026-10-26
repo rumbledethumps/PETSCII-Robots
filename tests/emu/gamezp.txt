@@ -1,0 +1,40 @@
+# The game's zero page, cleared at startup.
+#
+# cc65's zerobss clears the BSS segment and a zeropage segment is not part of
+# it, so the GAMEZEROPAGE in src/game/globals.s comes up holding whatever the
+# SRAM held. The emulator used to hide that -- its RAM started zeroed -- which
+# is why it only ever showed on a Pico or a Pocket. It fills memory at random
+# now, and the poke below makes the page dirty the same way on every run.
+#
+# SCREEN_SHAKE is the byte that shows. The VSYNC interrupt reads it from the
+# moment it is enabled, which is before any game code writes it, so a stale $38
+# put the character plane four pixels left on alternate frames all through the
+# intro menu and on into play. The bitmap plane held still underneath, so the
+# text and the tile window blurred against a steady backdrop.
+#
+# The poke goes in before the ROM's startup runs. SOURCE is the first label of
+# GAMEZEROPAGE, at $02 (src/rp6502.cfg); the segment's own start is a
+# linker symbol, and robots.sym holds only the program's. Only $38 is
+# checked back: everything else in the page is written on the way to the menu,
+# and a constructor that cleared the wrong span would still show up in the
+# frames below.
+poke SOURCE $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF $FF
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+peek SCREEN_SHAKE $00
+
+# x_pos_px of the character plane, over more than a four-frame shake cycle.
+# The shake runs only while the game clock does, which it does not at the menu,
+# so this stays 0 whatever SCREEN_SHAKE says; the SCREEN_SHAKE peek above is
+# what checks the constructor.
+peek xram:XRAM_CFG_CHARS+2 $00 $00
+run 1
+peek xram:XRAM_CFG_CHARS+2 $00 $00
+run 1
+peek xram:XRAM_CFG_CHARS+2 $00 $00
+run 1
+peek xram:XRAM_CFG_CHARS+2 $00 $00
+run 1
+peek xram:XRAM_CFG_CHARS+2 $00 $00
+run 1
+peek xram:XRAM_CFG_CHARS+2 $00 $00

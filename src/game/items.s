@@ -1,0 +1,1087 @@
+; Items, weapons fire, search and push, from the pre-release's x16Robots.ASM
+; lines 1468-1986 and 2032-2544.
+;
+; Converted from ACME to ca65. This is the half of the
+; machine-specific file that is not actually machine-specific: using an item,
+; spawning a shot, searching a crate and pushing an object are all decisions
+; about game state.
+;
+; Three things reached past that and had to change, and two more follow the
+; Amiga: choosing a square with the move keys turns the player to face it, as
+; the arrows always did (USER_SELECT_OBJECT, MV06-MV09), and firing with no
+; weapon selected does not turn him (FIRE_UP and the rest).
+;
+; The search progress dots poked a character straight into video memory; the
+; character plane belongs to the platform layer here.
+;
+; And the two calls to KERNAL GETIN. On the RP6502 $FFE4 is the RIA's RW0
+; portal, so the call would pull a byte out of XRAM and advance the portal
+; address. plat_getin returns what GETIN returned -- the next key code, or zero
+; -- and src/input.c keeps producing the codes STANDARD_CONTROLS names, so every
+; comparison in here is unchanged.
+;
+; And MOVE_OBJECT's two stores into MAP are JSR MAP_STORE, which redraws the
+; square on the live map while it is up (src/livemap.s).
+;
+; Two more follow X16 2.1. The search loop calls SEARCH_GLASS_CIRCLE before
+; each BACKGROUND_TASKS, as 2.1's does at $4B94, so the magnifier circles the
+; square while the dots go down (plat_search_glass, src/platform.c). And the
+; EMP shorts out a unit on water with WATER_CHECK's SHORT_OUT, as 2.1's does
+; ($4828), so its sparks are the map square's (background_tasks.s).
+;
+; And SEARCH_OBJECT returns once it has given what it found. The X16 and the PET
+; (x16Robots.ASM 2183-2225, PETROBOTS12.ASM 1572-1614), and 2.1 too, go on from
+; a pistol, a plasma gun or a medkit into the next item's CMP with whatever A
+; the display routine left. Theirs leave something that never matches, and so
+; does this one's -- but only as it happens to be compiled, so here it is
+; certain. The C++ ports' else-if chain and the MS-DOS version return.
+;
+; The zero page addresses are the original's, untranslated:
+; src/rp6502.cfg reserves $02-$3B for the game.
+
+        .include "petscii.inc"
+        .include "sounds.inc"
+        .import _plat_search_dot, _plat_getin
+        .segment "CODE"
+
+USE_ITEM:
+	;First figure out which item to use.
+	LDA	SELECTED_ITEM
+	CMP	#1	;BOMB
+	BNE	UI02
+	JMP	USE_BOMB
+UI02:	CMP	#2	;EMP
+	BNE	UI03
+	JMP	USE_EMP
+UI03:	CMP	#3	;MEDKIT
+	BNE	UI04
+	JMP	USE_MEDKIT
+UI04:	CMP	#4	;MAGNET
+	BNE	UI05
+	JMP	USE_MAGNET
+UI05:	RTS
+
+USE_BOMB:
+	LDA	#1	;COMPASS
+	STA	CURSOR_ON
+	JSR	USER_SELECT_OBJECT
+	;NOW TEST TO SEE IF THAT SPOT IS OPEN
+	JSR	BOMB_MAGNET_COMMON1
+	BEQ	BM30
+	JMP	BM3A				;If not, then exit routine.
+BM30:	;Now scan for any units at that location:
+	JSR	CHECK_FOR_UNIT
+	LDA	UNIT_FIND
+	CMP	#255			;255 means no unit found.
+	BEQ	BM31
+BM3A:	JMP	BOMB_MAGNET_COMMON2
+BM31:	LDX	#28	;Start of weapons units
+BOMB1:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	BOMB2
+	INX
+	CPX	#32
+	BNE	BOMB1
+	RTS	;no slots available right now, abort.
+BOMB2:	LDA	#6	;bomb AI
+	STA	UNIT_TYPE,X
+	LDA	#130	;bomb tile
+	STA	UNIT_TILE,X
+	LDA	MAP_X
+	STA	UNIT_LOC_X,X
+	LDA	MAP_Y
+	STA	UNIT_LOC_Y,X
+	LDA	#100		;How long until exposion?
+	STA	UNIT_TIMER_A,X
+	LDA	#0
+	STA	UNIT_A,X
+	DEC	INV_BOMBS
+	JSR	DISPLAY_ITEM
+	LDA	#01
+	STA	REDRAW_WINDOW
+	LDA	#SFX_MOVE		;move sound
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	RTS
+
+USE_MAGNET:
+	LDA	MAGNET_ACT	;only one magnet active at a time.
+	CMP	#0
+	BEQ	MG32
+	RTS
+MG32:	LDA	#1	;COMPASS
+	STA	CURSOR_ON
+	JSR	USER_SELECT_OBJECT
+	;NOW TEST TO SEE IF THAT SPOT IS OPEN
+	JSR	BOMB_MAGNET_COMMON1
+	BEQ	MG31
+	JMP	BOMB_MAGNET_COMMON2
+MG31:	LDX	#28	;Start of weapons units
+MAG1:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	MAG2
+	INX
+	CPX	#32
+	BNE	MAG1
+	RTS	;no slots available right now, abort.
+MAG2:	LDA	#20	;MAGNET AI
+	STA	UNIT_TYPE,X
+	LDA	#134	;MAGNET tile
+	STA	UNIT_TILE,X
+	LDA	MAP_X
+	STA	UNIT_LOC_X,X
+	LDA	MAP_Y
+	STA	UNIT_LOC_Y,X
+	LDA	#1		;How long until ACTIVATION
+	STA	UNIT_TIMER_A,X
+	LDA	#255		;how long does it live -A
+	STA	UNIT_TIMER_B,X
+	LDA	#5		;how long does it live -B
+	STA	UNIT_A,X
+	LDA	#1
+	STA	MAGNET_ACT	;only one magnet allowed at a time.
+	DEC	INV_MAGNET
+	JSR	DISPLAY_ITEM
+	LDA	#01
+	STA	REDRAW_WINDOW
+	LDA	#SFX_MOVE		;move sound
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	RTS
+
+BOMB_MAGNET_COMMON1:
+	LDA	#0
+	STA	CURSOR_ON
+	JSR	REVERSE_TILE
+	JSR	DRAW_MAP_WINDOW		;ERASE THE CURSOR
+	LDA	CURSOR_X
+	CLC
+	ADC	MAP_WINDOW_X
+	STA	MAP_X
+	STA	MOVTEMP_UX
+	LDA	CURSOR_Y
+	CLC
+	ADC	MAP_WINDOW_Y
+	STA	MAP_Y
+	STA	MOVTEMP_UY
+	JSR	GET_TILE_FROM_MAP
+	LDA	TILE
+	TAY
+	LDA	TILE_ATTRIB,Y
+	AND	#%00000001		;is that spot available
+	CMP	#%00000001		;for something to move onto it?
+	RTS
+
+BOMB_MAGNET_COMMON2:
+	LDA	#<MSG_BLOCKED
+	STA	$02
+	LDA	#>MSG_BLOCKED
+	STA	$03
+	JSR	PRINT_INFO
+	LDA	#SFX_ERROR		;ERROR SOUND
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	RTS
+
+USE_EMP:
+	LDA	#SFX_EMP		;EMP sound
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	LDA	#10
+	STA	BGFLASH
+	DEC	INV_EMP
+	JSR	DISPLAY_ITEM
+	LDX	#1	;start with unit#1 (skip player)
+EMP1:	;CHECK THAT UNIT EXISTS
+	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	EMP5
+	;CHECK HORIZONTAL POSITION
+	LDA	UNIT_LOC_X,X
+	CMP	MAP_WINDOW_X
+	BCC	EMP5
+	LDA	MAP_WINDOW_X
+	CLC
+	ADC	#10
+	CMP	UNIT_LOC_X,X
+	BCC	EMP5
+	;NOW CHECK VERTICAL
+	LDA	UNIT_LOC_Y,X
+	CMP	MAP_WINDOW_Y
+	BCC	EMP5
+	LDA	MAP_WINDOW_Y
+	CLC
+	ADC	#6
+	CMP	UNIT_LOC_Y,X
+	BCC	EMP5
+	LDA	#255
+	STA	UNIT_TIMER_A,X
+	;test to see if unit is above water
+	LDA	UNIT_LOC_X,X
+	STA	MAP_X
+	LDA	UNIT_LOC_Y,X
+	STA	MAP_Y
+	JSR	GET_TILE_FROM_MAP
+	LDA	TILE
+	CMP	#204	;WATER
+	BNE	EMP5
+	JSR	SHORT_OUT	;2.1 $4828: as WATER_CHECK's, the sparks on the map
+EMP5:	INX
+	CPX	#28
+	BNE	EMP1
+	LDA	#<MSG_EMPUSED
+	STA	$02
+	LDA	#>MSG_EMPUSED
+	STA	$03
+	JSR	PRINT_INFO
+	RTS
+
+USE_MEDKIT:
+	LDA	UNIT_HEALTH
+	CMP	#12	;Do we even need the medkit?
+	BNE	UMK1
+	RTS
+UMK1:	;Now figure out how many HP we need to be healthy.
+	LDA	#12
+	SEC
+	SBC	UNIT_HEALTH
+	STA	TEMP_A		;how many we need.
+	LDA	INV_MEDKIT	;how many do we have?
+	SEC
+	SBC	TEMP_A
+	BCC	UMK2
+	;we had more than we need, so go to full health.
+	LDA	#12
+	STA	UNIT_HEALTH
+	LDA	INV_MEDKIT
+	SEC
+	SBC	TEMP_A
+	STA	INV_MEDKIT
+	JMP	UMK3
+UMK2:	;we had less than we need, so we'll use what is available.
+	LDA	INV_MEDKIT
+	CLC
+	ADC	UNIT_HEALTH
+	STA	UNIT_HEALTH
+	LDA	#0
+	STA	INV_MEDKIT
+UMK3:	JSR	DISPLAY_PLAYER_HEALTH
+	JSR	DISPLAY_ITEM
+	LDA	#SFX_MEDKIT		;MEDKIT SOUND
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	LDA	#<MSG_MUCHBET
+	STA	$02
+	LDA	#>MSG_MUCHBET
+	STA	$03
+	JSR	PRINT_INFO
+	RTS
+
+FIRE_UP:
+	LDA	SELECTED_WEAPON	;RP6502: with no weapon he does not turn,
+	BNE	FRU0	;as on the Amiga; the X16 turned him first
+	RTS
+FRU0:	LDA	#0	;FACE UP
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	LDA	SELECTED_WEAPON
+	CMP	#1
+	BNE	FRU1
+	JMP	FIRE_UP_PISTOL
+FRU1:	JMP	FIRE_UP_PLASMA
+
+FIRE_UP_PISTOL:
+	LDA	AMMO_PISTOL
+	CMP	#0
+	BNE	FU00
+	RTS
+FU00:	LDX	#28
+FU01:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	FU02
+	INX
+	CPX	#32	;max unit for weaponsfire
+	BNE	FU01
+	RTS
+FU02:	LDA	#12	;Fire pistol up AI routine
+	STA	UNIT_TYPE,X
+	LDA	#244	;tile for vertical weapons fire
+	STA	UNIT_TILE,X
+	LDA	#3		;travel distance.
+	STA	UNIT_A,X
+	LDA	#0		;weapon-type = pistol
+	STA	UNIT_B,X
+	JMP	AFTER_FIRE
+
+FIRE_UP_PLASMA:
+	LDA	BIG_EXP_ACT
+	CMP	#1
+	BEQ	FUP3
+	LDA	PLASMA_ACT
+	CMP	#1
+	BEQ	FUP3
+	LDA	AMMO_PLASMA
+	CMP	#0
+	BNE	FUP0
+FUP3:	RTS
+FUP0:	LDX	#28
+FUP1:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	FUP2
+	INX
+	CPX	#32	;max unit for weaponsfire
+	BNE	FUP1
+	RTS
+FUP2:	LDA	#12	;Fire pistol up AI routine
+	STA	UNIT_TYPE,X
+	LDA	#240	;tile for vertical plasma bolt
+	STA	UNIT_TILE,X
+	LDA	#3		;travel distance.
+	STA	UNIT_A,X
+	LDA	#1		;weapon-type = plasma
+	STA	UNIT_B,X
+	STA	PLASMA_ACT
+	JMP	AFTER_FIRE
+
+FIRE_DOWN:
+	LDA	SELECTED_WEAPON	;RP6502: with no weapon he does not turn,
+	BNE	FRD0	;as on the Amiga; the X16 turned him first
+	RTS
+FRD0:	LDA	#3	;FACE DOWN
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	LDA	SELECTED_WEAPON
+	CMP	#1
+	BNE	FRD1
+	JMP	FIRE_DOWN_PISTOL
+FRD1:	JMP	FIRE_DOWN_PLASMA
+
+FIRE_DOWN_PISTOL:
+	LDA	AMMO_PISTOL
+	CMP	#0
+	BNE	FD00
+	RTS
+FD00:	LDX	#28
+FD01:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	FD02
+	INX
+	CPX	#32	;max unit for weaponsfire
+	BNE	FD01
+	RTS
+FD02:	LDA	#13	;Fire pistol DOWN AI routine
+	STA	UNIT_TYPE,X
+	LDA	#244	;tile for vertical weapons fire
+	STA	UNIT_TILE,X
+	LDA	#3		;travel distance.
+	STA	UNIT_A,X
+	LDA	#0		;weapon-type = pistol
+	STA	UNIT_B,X
+	JMP	AFTER_FIRE
+
+FIRE_DOWN_PLASMA:
+	LDA	BIG_EXP_ACT
+	CMP	#1
+	BEQ	FDP3
+	LDA	PLASMA_ACT
+	CMP	#1
+	BEQ	FDP3
+	LDA	AMMO_PLASMA
+	CMP	#0
+	BNE	FDP0
+FDP3:	RTS
+FDP0:	LDX	#28
+FDP1:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	FDP2
+	INX
+	CPX	#32	;max unit for weaponsfire
+	BNE	FDP1
+	RTS
+FDP2:	LDA	#13	;Fire pistol DOWN AI routine
+	STA	UNIT_TYPE,X
+	LDA	#240	;tile for vertical weapons fire
+	STA	UNIT_TILE,X
+	LDA	#3		;travel distance.
+	STA	UNIT_A,X
+	LDA	#1		;weapon-type = plasma
+	STA	UNIT_B,X
+	STA	PLASMA_ACT
+	JMP	AFTER_FIRE
+
+FIRE_LEFT:
+	LDA	SELECTED_WEAPON	;RP6502: with no weapon he does not turn,
+	BNE	FRL0	;as on the Amiga; the X16 turned him first
+	RTS
+FRL0:	LDA	#6	;FACE LEFT
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	LDA	SELECTED_WEAPON
+	CMP	#1
+	BNE	FRL1
+	JMP	FIRE_LEFT_PISTOL
+FRL1:	JMP	FIRE_LEFT_PLASMA
+
+FIRE_LEFT_PISTOL:
+	LDA	AMMO_PISTOL
+	CMP	#0
+	BNE	FL00
+	RTS
+FL00:	LDX	#28
+FL01:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	FL02
+	INX
+	CPX	#32	;max unit for weaponsfire
+	BNE	FL01
+	RTS
+FL02:	LDA	#14	;Fire pistol LEFT AI routine
+	STA	UNIT_TYPE,X
+	LDA	#245	;tile for horizontal weapons fire
+	STA	UNIT_TILE,X
+	LDA	#5		;travel distance.
+	STA	UNIT_A,X
+	LDA	#0		;weapon-type = pistol
+	STA	UNIT_B,X
+	JMP	AFTER_FIRE
+
+FIRE_LEFT_PLASMA:
+	LDA	BIG_EXP_ACT
+	CMP	#1
+	BEQ	FLP3
+	LDA	PLASMA_ACT
+	CMP	#1
+	BEQ	FLP3
+	LDA	AMMO_PLASMA
+	CMP	#0
+	BNE	FLP0
+FLP3:	RTS
+FLP0:	LDX	#28
+FLP1:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	FLP2
+	INX
+	CPX	#32	;max unit for weaponsfire
+	BNE	FLP1
+	RTS
+FLP2:	LDA	#14	;Fire pistol LEFT AI routine
+	STA	UNIT_TYPE,X
+	LDA	#241	;tile for horizontal weapons fire
+	STA	UNIT_TILE,X
+	LDA	#5		;travel distance.
+	STA	UNIT_A,X
+	LDA	#1		;weapon-type = plasma
+	STA	UNIT_B,X
+	STA	PLASMA_ACT
+	JMP	AFTER_FIRE
+
+FIRE_RIGHT:
+	LDA	SELECTED_WEAPON	;RP6502: with no weapon he does not turn,
+	BNE	FRR0	;as on the Amiga; the X16 turned him first
+	RTS
+FRR0:	LDA	#9	;FACE RIGHT
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	LDA	SELECTED_WEAPON
+	CMP	#1
+	BNE	FRR1
+	JMP	FIRE_RIGHT_PISTOL
+FRR1:	JMP	FIRE_RIGHT_PLASMA
+
+FIRE_RIGHT_PISTOL:
+	LDA	AMMO_PISTOL
+	CMP	#0
+	BNE	FR00
+	RTS
+FR00:	LDX	#28
+FR01:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	FR02
+	INX
+	CPX	#32	;max unit for weaponsfire
+	BNE	FR01
+	RTS
+FR02:	LDA	#15	;Fire pistol RIGHT AI routine
+	STA	UNIT_TYPE,X
+	LDA	#245	;tile for horizontal weapons fire
+	STA	UNIT_TILE,X
+	LDA	#5		;travel distance.
+	STA	UNIT_A,X
+	LDA	#0		;weapon-type = pistol
+	STA	UNIT_B,X
+	JMP	AFTER_FIRE
+
+FIRE_RIGHT_PLASMA:
+	LDA	BIG_EXP_ACT
+	CMP	#1
+	BEQ	FRP3
+	LDA	PLASMA_ACT
+	CMP	#1
+	BEQ	FRP3
+	LDA	AMMO_PLASMA
+	CMP	#0
+	BNE	FRP0
+FRP3:	RTS
+FRP0:	LDX	#28
+FRP1:	LDA	UNIT_TYPE,X
+	CMP	#0
+	BEQ	FRP2
+	INX
+	CPX	#32	;max unit for weaponsfire
+	BNE	FRP1
+	RTS
+FRP2:	LDA	#15	;Fire pistol RIGHT AI routine
+	STA	UNIT_TYPE,X
+	LDA	#241	;tile for horizontal weapons fire
+	STA	UNIT_TILE,X
+	LDA	#5		;travel distance.
+	STA	UNIT_A,X
+	LDA	#1		;weapon-type = plasma
+	STA	UNIT_B,X
+	STA	PLASMA_ACT
+	JMP	AFTER_FIRE
+
+AFTER_FIRE:
+	LDA	#0
+	STA	UNIT_TIMER_A,X
+	LDA	UNIT_LOC_X
+	STA	UNIT_LOC_X,X
+	LDA	UNIT_LOC_Y
+	STA	UNIT_LOC_Y,X
+	STX	UNIT
+	LDA	SELECTED_WEAPON
+	CMP	#2
+	BEQ	AF01
+	LDA	#SFX_PISTOL		;PISTOL-SOUND
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	DEC	AMMO_PISTOL
+	JSR	DISPLAY_WEAPON
+	RTS
+AF01:	LDA	#SFX_PLASMA		;PLASMA-GUN-SOUND
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	DEC	AMMO_PLASMA
+	JSR	DISPLAY_WEAPON
+	RTS
+;This routine is invoked when the user presses S to search
+;an object such as a crate, chair, or plant.
+SEARCH_OBJECT:
+	LDA	#2	;MAGNIFIER
+	STA	CURSOR_ON
+	JSR	USER_SELECT_OBJECT
+	JSR	REVERSE_TILE
+	LDA	#1
+	STA	REDRAW_WINDOW
+CHS1:	;first check of object is searchable
+	JSR	CALC_COORDINATES
+	JSR	GET_TILE_FROM_MAP
+	LDX	TILE
+	LDA	TILE_ATTRIB,X
+	AND	#%01000000	;can search attribute
+	CMP	#%01000000
+	BEQ	CHS2
+	LDA	#0
+	STA	CURSOR_ON
+	JSR	REVERSE_TILE
+	JMP	CHS3
+CHS2:	;is the tile a crate?
+	LDX	TILE
+	CPX	#041	;BIG CRATE
+	BEQ	CHS2B
+	CPX	#045	;small CRATE
+	BEQ	CHS2B
+	CPX	#199	;"Pi" CRATE
+	BEQ	CHS2B
+	JMP	CHS2C
+CHS2B:	LDA	DESTRUCT_PATH,X
+	STA	TILE
+	JSR	PLOT_TILE_TO_MAP
+CHS2C:	;Now check if there is an object there.
+	LDA	#0
+	STA	SEARCHBAR
+	LDA	#<MSG_SEARCHING
+	STA	$02
+	LDA	#>MSG_SEARCHING
+	STA	$03
+	JSR	PRINT_INFO
+SOBJ1:	LDA	#18	;delay time between search periods.
+	STA	BGTIMER2
+SOBJ2:	JSR	SEARCH_GLASS_CIRCLE	;RP6502: 2.1's circling magnifier ($4B94)
+	JSR	BACKGROUND_TASKS
+	LDA	BGTIMER2
+	CMP	#0
+	BNE	SOBJ2
+	; The X16 pokes a period straight into video memory at text row 29,
+	; column 9 + SEARCHBAR. The character plane belongs to the platform
+	; layer here, so the index goes in A and plat_search_dot places it.
+	;
+	; The original followed that with a store to a fixed address in the
+	; PET's ROM space, indexed by an X nobody had set -- a leftover that
+	; evaporates on the X16 because the target is ROM, and would corrupt
+	; RAM here. Deleted; see docs/porting-notes.md.
+	LDA	SEARCHBAR
+	JSR	_plat_search_dot
+	INC	SEARCHBAR
+	LDA	SEARCHBAR
+	CMP	#8
+	BNE	SOBJ1
+	LDA	#0
+	STA	CURSOR_ON
+	JSR	REVERSE_TILE
+	JSR	DRAW_MAP_WINDOW		;ERASE THE CURSOR
+	JSR	CALC_COORDINATES
+	JSR	CHECK_FOR_HIDDEN_UNIT
+	LDA	UNIT_FIND
+	CMP	#255
+	BNE	SOBJ5
+CHS3:	LDA	#<MSG_NOTFOUND
+	STA	$02
+	LDA	#>MSG_NOTFOUND
+	STA	$03
+	JSR	PRINT_INFO
+	RTS
+SOBJ5:	LDX	UNIT_FIND
+	LDA	UNIT_TYPE,X
+	STA	TEMP_A		;store object type
+	LDA	UNIT_A,X
+	STA	TEMP_B		;store secondary info
+	LDA	#0	;DELETE ITEM ONCE FOUND
+	STA	UNIT_TYPE,X
+	;***NOW PROCESS THE ITEM FOUND***
+	LDA	#SFX_FOUNDITEM		;ITEM-FOUND-SOUND
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	LDA	TEMP_A
+	CMP	#128	;key
+	BEQ	SOBJ10
+	JMP	SOBJ15
+SOBJ10:	LDA	TEMP_B		;WHICH SORT OF KEY?
+	CMP	#00
+	BNE	SOBJK1
+	LDA	KEYS
+	ORA	#%00000001	;Add spade key
+	STA	KEYS
+	JMP	SOBJ12
+SOBJK1:	CMP	#01
+	BNE	SOBJK2
+	LDA	KEYS
+	ORA	#%00000010	;Add heart key
+	STA	KEYS
+	JMP	SOBJ12
+SOBJK2:	LDA	KEYS
+	ORA	#%00000100	;Add star key
+	STA	KEYS
+SOBJ12:	LDA	#<MSG_FOUNDKEY
+	STA	$02
+	LDA	#>MSG_FOUNDKEY
+	STA	$03
+	JSR	PRINT_INFO
+	JSR	DISPLAY_KEYS
+	RTS
+SOBJ15:	CMP	#129	;TIME BOMB
+	BNE	SOBJ17
+	LDA	TEMP_B
+	CLC
+	ADC	INV_BOMBS
+	STA	INV_BOMBS
+	LDA	#<MSG_FOUNDBOMB
+	STA	$02
+	LDA	#>MSG_FOUNDBOMB
+	STA	$03
+	JSR	PRINT_INFO
+	JSR	DISPLAY_ITEM
+	RTS
+SOBJ17:	CMP	#130	;EMP
+	BNE	SOBJ20
+	LDA	TEMP_B
+	CLC
+	ADC	INV_EMP
+	STA	INV_EMP
+	LDA	#<MSG_FOUNDEMP
+	STA	$02
+	LDA	#>MSG_FOUNDEMP
+	STA	$03
+	JSR	PRINT_INFO
+	JSR	DISPLAY_ITEM
+	RTS
+SOBJ20:	CMP	#131	;PISTOL
+	BNE	SOBJ21
+	LDA	TEMP_B
+	CLC
+	ADC	AMMO_PISTOL
+	STA	AMMO_PISTOL
+	BCC	SOBJ2A	;If we rolled over past 255
+	LDA	#255	;set it to 255.
+	STA	AMMO_PISTOL
+SOBJ2A:	LDA	#<MSG_FOUNDGUN
+	STA	$02
+	LDA	#>MSG_FOUNDGUN
+	STA	$03
+	JSR	PRINT_INFO
+	JSR	DISPLAY_WEAPON
+	RTS		;RP6502: the X16 and the PET fall on into the next CMP
+SOBJ21:	CMP	#132	;PLASMA GUN
+	BNE	SOBJ22
+	LDA	TEMP_B
+	CLC
+	ADC	AMMO_PLASMA
+	STA	AMMO_PLASMA
+	LDA	#<MSG_FOUNDPLAS
+	STA	$02
+	LDA	#>MSG_FOUNDPLAS
+	STA	$03
+	JSR	PRINT_INFO
+	JSR	DISPLAY_WEAPON
+	RTS		;RP6502, as above
+SOBJ22:	CMP	#133	;MEDKIT
+	BNE	SOBJ23
+	LDA	TEMP_B
+	CLC
+	ADC	INV_MEDKIT
+	STA	INV_MEDKIT
+	LDA	#<MSG_FOUNDMED
+	STA	$02
+	LDA	#>MSG_FOUNDMED
+	STA	$03
+	JSR	PRINT_INFO
+	JSR	DISPLAY_ITEM
+	RTS		;RP6502, as above
+SOBJ23:	CMP	#134	;MAGNET
+	BNE	SOBJ99
+	LDA	TEMP_B
+	CLC
+	ADC	INV_MAGNET
+	STA	INV_MAGNET
+	LDA	#<MSG_FOUNDMAG
+	STA	$02
+	LDA	#>MSG_FOUNDMAG
+	STA	$03
+	JSR	PRINT_INFO
+	JSR	DISPLAY_ITEM
+SOBJ99:	;ADD CODE HERE FOR OTHER OBJECT TYPES
+	RTS
+SEARCHBAR:	.byte 00;to count how many periods to display.
+
+;combines cursor location with window location
+;to determine coordinates for MAP_X and MAP_Y
+CALC_COORDINATES:
+	LDA	CURSOR_X
+	CLC
+	ADC	MAP_WINDOW_X
+	STA	MAP_X
+	LDA	CURSOR_Y
+	CLC
+	ADC	MAP_WINDOW_Y
+	STA	MAP_Y
+	RTS
+
+;This routine is called by routines such as the move, search,
+;or use commands.  It displays a cursor and allows the user
+;to pick a direction of an object.
+USER_SELECT_OBJECT:
+	LDA	#SFX_BEEP		;short beep sound
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	LDA	#5
+	STA	CURSOR_X
+	LDA	#3
+	STA	CURSOR_Y
+	JSR	REVERSE_TILE
+	;First ask user which object to move
+MV01:	JSR	BACKGROUND_TASKS
+	LDA	UNIT_TYPE
+	CMP	#0	;Did player die wile moving something?
+	BNE	MVCONT
+	LDA	#0
+	STA	CURSOR_ON
+	JSR	REVERSE_TILE
+	RTS
+MVCONT:	LDA	CONTROL
+	CMP	#2
+	BNE	MV01A
+	JMP	MVSNES
+MV01A:	JSR	_plat_getin
+	CMP	#$00
+	BEQ	MV02
+MV02:	CMP	#$1D	;CURSOR RIGHT
+	BNE	MV03
+	INC	CURSOR_X
+	LDA	#9	;FACE RIGHT
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	RTS
+MV03:	CMP	#$9D	;CURSOR LEFT
+	BNE	MV04
+	DEC	CURSOR_X
+	LDA	#6	;FACE LEFT
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	RTS
+MV04:	CMP	#$11	;CURSOR DOWN
+	BNE	MV05
+	INC	CURSOR_Y
+	LDA	#3	;FACE DOWN
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	RTS
+MV05:	CMP	#$91	;CURSOR UP
+	BNE	MV06
+	DEC	CURSOR_Y
+	LDA	#0	;FACE UP
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	RTS
+	; RP6502: the move keys turn him too, as the arrows do and as every
+	; input does on the Amiga.
+MV06:	CMP	KEY_MOVE_LEFT
+	BNE	MV07
+	DEC	CURSOR_X
+	LDA	#6	;FACE LEFT
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	RTS
+MV07:	CMP	KEY_MOVE_DOWN
+	BNE	MV08
+	INC	CURSOR_Y
+	LDA	#3	;FACE DOWN
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	RTS
+MV08:	CMP	KEY_MOVE_RIGHT
+	BNE	MV09
+	INC	CURSOR_X
+	LDA	#9	;FACE RIGHT
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	RTS
+MV09:	CMP	KEY_MOVE_UP
+	BNE	MV0A
+	DEC	CURSOR_Y
+	LDA	#0	;FACE UP
+	STA	PLAYER_DIRECTION
+	JSR	DISPLAY_PLAYER_SPRITE
+	RTS
+MV0A:	JMP	MV01
+
+MVSNES:	;SNES controls for this routine
+	JSR	SNES_CONTROLER_READ
+	LDA	NEW_RIGHT
+	CMP	#1
+	BNE	MVS03
+	INC	CURSOR_X
+	LDA	#0
+	STA	NEW_RIGHT
+	RTS
+MVS03:	LDA	NEW_LEFT
+	CMP	#1
+	BNE	MVS04
+	DEC	CURSOR_X
+	LDA	#0
+	STA	NEW_LEFT
+	RTS
+MVS04:	LDA	NEW_DOWN
+	CMP	#1
+	BNE	MVS05
+	INC	CURSOR_Y
+	LDA	#0
+	STA	NEW_DOWN
+	RTS
+MVS05:	LDA	NEW_UP
+	CMP	#1
+	BNE	MVS06
+	DEC	CURSOR_Y
+	LDA	#0
+	STA	NEW_UP
+	RTS
+MVS06:	JMP	MV01
+
+MOVE_OBJECT:
+	LDA	#3	;HAND
+	STA	CURSOR_ON
+	JSR	USER_SELECT_OBJECT
+	LDA	UNIT
+	;now test that object to see if it
+	;is allowed to be moved.
+MV10:	LDA	#0
+	STA	CURSOR_ON
+	JSR	REVERSE_TILE
+	JSR	DRAW_MAP_WINDOW		;ERASE THE CURSOR
+	JSR	CALC_COORDINATES
+	JSR	CHECK_FOR_HIDDEN_UNIT
+	LDA	UNIT_FIND
+	STA	MOVTEMP_U
+	JSR	GET_TILE_FROM_MAP
+	LDA	TILE
+	TAY
+	LDA	TILE_ATTRIB,Y
+	AND	#%00000100		;can it be moved?
+	CMP	#%00000100
+	BEQ	MV11
+	LDA	#<MSG_CANTMOVE
+	STA	$02
+	LDA	#>MSG_CANTMOVE
+	STA	$03
+	JSR	PRINT_INFO
+	LDA	#SFX_ERROR		;ERROR SOUND
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	RTS
+MV11:	LDA	TILE
+	STA	MOVTEMP_O	;Store which tile it is we are moving
+	LDA	MAP_X
+	STA	MOVTEMP_X	;Store original location of object
+	LDA	MAP_Y
+	STA	MOVTEMP_Y
+	LDA	#3	;HAND
+	STA	CURSOR_ON
+	JSR	REVERSE_TILE
+	LDA	#SFX_BEEP		;beep sound
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	;NOW ASK THE USER WHICH DIRECTION TO MOVE IT TO
+MV15:	JSR	BACKGROUND_TASKS
+	LDA	UNIT_TYPE
+	CMP	#0	;Did player die wile moving something?
+	BNE	MVCONT2
+	LDA	#0
+	STA	CURSOR_ON
+	JSR	REVERSE_TILE
+	RTS
+MVCONT2:	;which controller are we using?
+	LDA	CONTROL
+	CMP	#2
+	BNE	MV15B
+	JMP	SMV30
+
+MV15B:	;keyboard control
+	JSR	_plat_getin
+	CMP	#$00
+	BEQ	MV15
+MV16:	CMP	#$1D	;CURSOR RIGHT
+	BNE	MV17
+	INC	CURSOR_X
+	JMP	MV25
+MV17:	CMP	#$9D	;CURSOR LEFT
+	BNE	MV18
+	DEC	CURSOR_X
+	JMP	MV25
+MV18:	CMP	#$11	;CURSOR DOWN
+	BNE	MV19
+	INC	CURSOR_Y
+	JMP	MV25
+MV19:	CMP	#$91	;CURSOR UP
+	BNE	MV20
+	DEC	CURSOR_Y
+	JMP	MV25
+MV20:	CMP	KEY_MOVE_LEFT
+	BNE	MV2A
+	DEC	CURSOR_X
+	JMP	MV25
+MV2A:	CMP	KEY_MOVE_DOWN
+	BNE	MV2B
+	INC	CURSOR_Y
+	JMP	MV25
+MV2B:	CMP	KEY_MOVE_RIGHT
+	BNE	MV2C
+	INC	CURSOR_X
+	JMP	MV25
+MV2C:	CMP	KEY_MOVE_UP
+	BNE	MV2D
+	DEC	CURSOR_Y
+	JMP	MV25
+MV2D:	JMP	MV15
+
+SMV30:	;SNES controls
+	JSR	SNES_CONTROLER_READ
+	LDA	NEW_RIGHT
+	CMP	#1
+	BNE	SMV31
+	INC	CURSOR_X
+	LDA	#0
+	STA	NEW_RIGHT
+	JMP	MV25
+SMV31:	LDA	NEW_LEFT
+	CMP	#1
+	BNE	SMV32
+	DEC	CURSOR_X
+	LDA	#0
+	STA	NEW_LEFT
+	JMP	MV25
+SMV32:	LDA	NEW_DOWN
+	CMP	#1
+	BNE	SMV33
+	INC	CURSOR_Y
+	LDA	#0
+	STA	NEW_DOWN
+	JMP	MV25
+SMV33:	LDA	NEW_UP
+	CMP	#1
+	BNE	SMV34
+	DEC	CURSOR_Y
+	LDA	#0
+	STA	NEW_UP
+	JMP	MV25
+SMV34:	JMP	MV15
+
+	;NOW TEST TO SEE IF THAT SPOT IS OPEN
+MV25:	LDA	#0
+	STA	CURSOR_ON
+	JSR	REVERSE_TILE
+	JSR	DRAW_MAP_WINDOW		;ERASE THE CURSOR
+	LDA	CURSOR_X
+	CLC
+	ADC	MAP_WINDOW_X
+	STA	MAP_X
+	STA	MOVTEMP_UX
+	LDA	CURSOR_Y
+	CLC
+	ADC	MAP_WINDOW_Y
+	STA	MAP_Y
+	STA	MOVTEMP_UY
+	JSR	GET_TILE_FROM_MAP
+	LDA	TILE
+	TAY
+	LDA	TILE_ATTRIB,Y
+	AND	#%00100000		;is that spot available
+	CMP	#%00100000		;for something to move onto it?
+	BEQ	MV30
+	JMP	MV3A				;If not, then exit routine.
+MV30:	;Now scan for any units at that location:
+	JSR	CHECK_FOR_UNIT
+	LDA	UNIT_FIND
+	CMP	#255			;255 means no unit found.
+	BEQ	MV31
+MV3A:	LDA	#<MSG_BLOCKED
+	STA	$02
+	LDA	#>MSG_BLOCKED
+	STA	$03
+	JSR	PRINT_INFO
+	LDA	#SFX_ERROR		;ERROR SOUND
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	RTS
+MV31:	LDA	#SFX_MOVE		;move sound
+	JSR	PLAY_DIGI_SOUND	;SOUND PLAY
+	LDY	#0
+	LDA	($04),Y			;Grab current object
+	STA	MOVTEMP_D
+	LDA	MOVTEMP_O
+	JSR	MAP_STORE			;replace with obect we are moving (RP6502: and the live map)
+	LDA	MOVTEMP_X		;RETRIEVE original location of object
+	STA	MAP_X
+	LDA	MOVTEMP_Y
+	STA	MAP_Y
+	JSR	GET_TILE_FROM_MAP
+	LDA	MOVTEMP_D
+	CMP	#148		;trash compactor tile
+	BNE	MV31A
+	LDA	#09		;Floor tile
+MV31A:	JSR	MAP_STORE			;Replace former location (RP6502: and the live map)
+	LDA	#1
+	STA	REDRAW_WINDOW		;See the result
+	LDA	MOVTEMP_U
+	CMP	#255
+	BNE	MV32
+	RTS
+MV32:	LDX	MOVTEMP_U
+	LDA	MOVTEMP_UX
+	STA	UNIT_LOC_X,X
+	LDA	MOVTEMP_UY
+	STA	UNIT_LOC_Y,X
+	RTS
+MOVTEMP_O:	.byte 00;origin tile
+MOVTEMP_D:	.byte 00;destination tile
+MOVTEMP_X:	.byte 00;x-coordinate
+MOVTEMP_Y:	.byte 00;y-coordinate
+MOVTEMP_U:	.byte 00;unit number (255=none)
+MOVTEMP_UX:	.byte 00
+MOVTEMP_UY:	.byte 00

@@ -1,0 +1,74 @@
+# The unit overlay, and picking a level from the menu.
+#
+# DRAW_MAP_WINDOW draws the terrain and then, where a mobile unit stands, the
+# unit over it. Here that is a sprite of its own over the tile's, from the
+# bank of unit images, and nothing in level-a reaches it: no robot comes
+# inside the window anywhere the player can walk to, and doors and found objects
+# are written into the map rather than drawn over it.
+#
+# level-g starts the player at 51,33 with a robot already in view, so it reaches
+# the path on the first frame. Getting there also exercises the map option on
+# the intro menu, which nothing else does.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+
+# Down to CHANGE MAP, then space six times: a to g.
+press k
+run 6
+release k
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+
+# Back up to START GAME and go.
+press i
+run 6
+release i
+run 10
+press space
+run 6
+release space
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 10
+
+# level 6, player at 51,33, 23 robots, window at 46,30, and something drawn over
+# the terrain -- which is what the rest of the suite never gets to see.
+peek xram:XRAM_PROBE+PROBE_LEVEL $06
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $33 $21
+peek xram:XRAM_PROBE+PROBE_ROBOTS $17
+peek xram:XRAM_PROBE+PROBE_WINDOW_X $2E $1E
+peek xram:XRAM_PROBE+PROBE_VISIBLE $01
+
+# The robot at 48,30 is window tile (2,0): a hoverbot, tile 98, which is 2.1's
+# sprite 52. It is the first unit sprite, at x 48 and y SCREEN_TOP, showing the first
+# image of the bank with the robots' palette -- 2.1's unit palette, whose entry
+# 1 is black. Nothing else is in the window, so the next unit sprite is parked.
+peek xram:XRAM_PF+PF_UNITS*10 $30 $00 SCREEN_TOP&255 SCREEN_TOP>>8
+peek xram:XRAM_PF+PF_UNITS*10+4 XRAM_UNITS&255 XRAM_UNITS>>8 XRAM_PAL_B&255 XRAM_PAL_B>>8
+peek xram:XRAM_PF+PF_UNITS*10+8 $55 $02
+peek xram:XRAM_PF+(PF_UNITS+1)*10+2 $F0 $00
+peek xram:XRAM_PROBE+PROBE_UNITS $01

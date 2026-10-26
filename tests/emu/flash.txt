@@ -1,0 +1,166 @@
+# The border flash, in real play.
+#
+# INFLICT_DAMAGE sets BORDER to 10 when the unit it hurts is the player, and the
+# interrupt counts it down from there. Nothing else in the suite reaches it: the
+# player takes no damage anywhere a script can get to in level-a.
+#
+# level-e has a hazard at 75,42 that hurts him once a second or so, which makes
+# a repeatable trigger. Getting there is 25 squares through a level with doors
+# in the way, so the route below was recorded by tests/emu/playthrough.py,
+# which drives the emulator a step at a time and re-plans from where the
+# player actually is. Replayed open loop it is deterministic, because the RNG
+# starts from zero at power-on and is never reseeded, as in 2.1.
+#
+# Regenerate with:  tests/emu/playthrough.py e 75 42
+#
+# Names such as UNIT_TYPE and XRAM_PROBE come from robots.sym, which the build
+# writes beside the ROM: RAM symbols move whenever the code above them changes
+# size, and XRAM ones whenever xram_layout_t in src/xram.h changes.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press k
+run 6
+release k
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press i
+run 6
+release i
+run 10
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 20
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press k
+run 8
+release k
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press l
+run 8
+release l
+run 8
+press i
+run 8
+release i
+run 8
+press l
+run 8
+release l
+run 8
+press i
+run 8
+release i
+run 8
+
+# On the hazard, untouched.
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $4B $2A
+peek xram:XRAM_PROBE+PROBE_HEALTH $0C
+
+# It hurts him repeatedly, which is what sets BORDER: INFLICT_DAMAGE writes 10
+# there whenever the unit it hurts is the player. Health settles at 1 and the
+# hazard loses interest, so this is a plateau rather than a moment.
+run 200
+peek xram:XRAM_PROBE+PROBE_HEALTH $01
+
+# The interrupt counts BORDER down, and it reaching zero is what says the
+# interrupt walked it. What the flash shows -- the Amiga's whole-palette fade
+# towards red -- is checked frame by frame in effects.py.
+poke BORDER $06
+run 40
+peek BORDER $00

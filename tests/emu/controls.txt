@@ -1,0 +1,143 @@
+# The intro menu's control option, and the custom-key screen.
+#
+# CYCLE_CONTROLS clears KEYS_DEFINED, steps CONTROL, and writes the chosen
+# scheme over the intro screen's control line -- ten characters at row 4 from
+# column 4, which is where the menu draws that option's own label, so the label
+# is replaced by the answer. This port cycled the variable and drew nothing, so
+# the option looked broken.
+#
+# DELIBERATE CHANGE: two schemes, not the original's three. The original offers
+# keyboard, custom key and snes pad, which makes the pad a scheme you must
+# choose from a menu that reads the keyboard -- so the pad cannot select itself.
+# Here the pad is always live and merged with whichever keyboard scheme is
+# chosen, and the choice is only which keys: the defaults, or thirteen of your
+# own. tests/emu/gamepad.txt is the pad half of that.
+#
+# SET_CONTROLS then runs when START GAME is chosen: custom keys ask for thirteen
+# of them, anything else takes the defaults. That screen had never been ported
+# either, though SCR_CUSTOM_KEYS was sitting in the converted data.
+#
+# The cells are read whole, glyph and colour: the selected option is white,
+# colour 14 of the intro picture's palette, and the others its green 15, as the
+# Amiga's REVERSE_MENU_OPTION draws them.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+
+# Row 4 from column 4; at boot it is the option's own label, in the Amiga's
+# colour 15 for an option that is not selected.
+peek xram:XRAM_CHARS+4*SCR_STRIDE+4*2 $03 $8F $0F $8F $0E $8F $14 $8F $12 $8F $0F $8F $0C $8F $13 $8F $20 $8F $20 $8F
+
+# Down to the control option, and toggle it.
+press k
+run 6
+release k
+run 10
+press k
+run 6
+release k
+run 10
+press k
+run 6
+release k
+run 10
+press space
+run 6
+release space
+run 20
+# CONTROL 1, on the selected row, so in colour 14
+peek xram:XRAM_CHARS+4*SCR_STRIDE+4*2 $03 $8E $15 $8E $13 $8E $14 $8E $0F $8E $0D $8E $20 $8E $20 $8E $20 $8E $20 $8E
+press space
+run 6
+release space
+run 20
+# back to CONTROL 0
+peek xram:XRAM_CHARS+4*SCR_STRIDE+4*2 $04 $8E $05 $8E $06 $8E $01 $8E $15 $8E $0C $8E $14 $8E $20 $8E $20 $8E $20 $8E
+
+# Choose custom keys and start: SET_CUSTOM_KEYS puts up SCR_CUSTOM_KEYS and
+# waits for thirteen, echoing each back as the code it will be compared against.
+press space
+run 6
+release space
+run 20
+press i
+run 6
+release i
+run 10
+press i
+run 6
+release i
+run 10
+press i
+run 6
+release i
+run 10
+press space
+run 6
+release space
+run 40
+# Escape first. 2.1's SET_CUSTOM_KEYS refuses it ($59F2), so the pause stays
+# reachable: the game loop tests the thirteen before ESC.
+press escape
+run 8
+release escape
+run 8
+press i
+run 8
+release i
+run 8
+press k
+run 8
+release k
+run 8
+press j
+run 8
+release j
+run 8
+press l
+run 8
+release l
+run 8
+press w
+run 8
+release w
+run 8
+press s
+run 8
+release s
+run 8
+press a
+run 8
+release a
+run 8
+press d
+run 8
+release d
+run 8
+press 1
+run 8
+release 1
+run 8
+press 2
+run 8
+release 2
+run 8
+press 3
+run 8
+release 3
+run 8
+press 4
+run 8
+release 4
+run 8
+press 5
+run 8
+release 5
+run 8
+
+# Thirteen answers, in the order KEY_MOVE_UP lists them: move, fire, cycle, use,
+# search, push. These are the codes every CMP in the ported assembly is now
+# against -- I K J L W S A D and then 1 to 5.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY 600
+run 20
+peek KEY_MOVE_UP $49 $4B $4A $4C $57 $53 $41 $44 $31 $32 $33 $34 $35

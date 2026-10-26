@@ -1,0 +1,118 @@
+# The interrupt calls C, so it goes through set_irq.
+#
+# The VSYNC interrupt reaches C: the flash step and the keyboard scan, and the
+# PET's sound engine when this was written. cc65 compiles every C function
+# against twenty bytes of shared zero-page scratch -- the C stack pointer,
+# sreg, regsave, ptr1-4, tmp1-4 -- so a handler that calls C and does not put
+# those back returns to a C function holding its own pointers rewritten. As a
+# bare .interruptor this handler did exactly that.
+#
+# PLOT_TILE was C, which is how it showed: a tile whose base address was
+# corrupted mid-loop wrote its three rows into the bitmap plane instead of the
+# character plane, and the runs stayed behind the moving playfield for the rest
+# of the game. The fix is cc65's own: set_irq installs the handler and the
+# runtime's clevel_irq wrapper saves that zero page around the call.
+#
+# The renderer that draws the window now is C as well, and walking is what
+# drives it hardest: twenty steps right, each loading the tiles it brings into
+# view.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 60
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+press l
+run 8
+release l
+run 6
+
+# He reaches the wall at 46,38 with the window following him, and every step
+# loaded the column of tiles it brought into view while the interrupt ran C
+# underneath. A corrupted pointer in that code writes XRAM somewhere it should
+# not: the black tile and the first tile sprite's record are the places a stray
+# write from the renderer would land first. tests/emu/render.py checks what
+# the window shows.
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $2D $26
+peek xram:XRAM_PROBE+PROBE_WINDOW_X $28 $23
+peek xram:XRAM_BLANK $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00
+peek xram:XRAM_PF $00 $00 SCREEN_TOP&255 SCREEN_TOP>>8
+peek xram:XRAM_PF+8 $55 $02

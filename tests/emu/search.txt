@@ -1,0 +1,85 @@
+# Searching, which is the deepest path through the ported code so far.
+#
+# Pressing Z runs SEARCH_OBJECT, which raises the magnifier cursor and calls
+# USER_SELECT_OBJECT; that reads a key through what used to be KERNAL GETIN and
+# returns as soon as a direction arrives, having moved the cursor one cell. The
+# search then checks the tile is searchable, spends eight ticks laying down
+# progress dots while BACKGROUND_TASKS keeps the AI running underneath, calls
+# CHECK_FOR_HIDDEN_UNIT over the object's search box, and prints the result.
+#
+# level-a hides a pistol at 20,36 with a search box that reaches the crates
+# beside it. So one square left of the start, searching upward, finds it.
+#
+# What this exercises that nothing else does: the input translation, the
+# cursor sprite, the timer the search spins on -- which only advances because
+# the VSYNC interrupt is running -- the message console, and the HUD.
+
+# Start the game from the intro menu. START GAME is the first option, so space
+# is enough; the tests that care about the menu itself drive it further.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_AI60
+
+# One square left, to x=21.
+press j
+run 6
+release j
+run 20
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $15 $26
+
+# Z, then up: search the cell above.
+press z
+run 6
+release z
+run 10
+press i
+run 6
+release i
+
+# Eight dots at eighteen ticks each, so give it three seconds.
+run 200
+
+# The search is over, so the cursor is parked: its y is SPR_PARKED_Y, 240.
+peek xram:XRAM_HUD+HUD_CURSOR*10+2 $F0 $00
+
+# Probe byte 15 packs the selections: weapon in the low nibble, item in the
+# high one. 1 is the pistol, and finding it selects it.
+peek xram:XRAM_PROBE+PROBE_WEAPON_ITEM $01
+
+shot "search.png"
+
+# Searching never moves the player. The square to his right is not
+# searchable, so this search ends the moment the arrow chooses it, with the
+# arrow still down. The original clears the key buffer after a search; without
+# that the arrow repeated at once as a step.
+press z
+run 6
+release z
+run 10
+press right
+run 8
+release right
+run 30
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $15 $26
+
+# Held long past the 20 frames the PET and the pre-release held it off for,
+# the arrow still does not walk him: the clear forgets a key that is down, as
+# the Amiga's does, until it is let go and pressed again.
+press z
+run 6
+release z
+run 10
+press right
+run 60
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $15 $26
+release right
+run 10
+press right
+run 4
+release right
+run 10
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $16 $26

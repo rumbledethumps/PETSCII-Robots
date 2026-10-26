@@ -1,0 +1,61 @@
+# Video bring-up: the layers come up, the game screen's frame and text are laid
+# out, and level-a's window is drawn.
+#
+# The RNG starts from zero at power-on and is never reseeded, as in 2.1, so
+# the run is the same every time whatever the emulator's random fill of
+# memory, and selecting a canvas takes the console away for good.
+#
+# The peeks check the layout the renderer depends on, so a moved structure or a
+# wrong config names itself here. The screenshot is for a person to look at.
+
+# Start the game from the intro menu. START GAME is the first option, so space
+# is enough; the tests that care about the menu itself drive it further.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+
+# The layers came up where xram.h says. The playfield's first sprite sits at the
+# top left of the Amiga screen, SCREEN_TOP lines down the canvas, 24x24 at 4bpp,
+# and the player is the last of them, at window cell (5,3).
+# tests/emu/render.py checks what they show.
+peek xram:XRAM_PF $00 $00 SCREEN_TOP&255 SCREEN_TOP>>8
+peek xram:XRAM_PF+8 $55 $02
+peek xram:XRAM_PF+PF_PLAYER*10 $78 $00 (SCREEN_TOP+72)&255 (SCREEN_TOP+72)>>8
+
+# The frame and the text cover the 40x25 cells of the screen, from SCREEN_TOP.
+peek xram:XRAM_CFG_HUD+2 $00 $00 SCREEN_TOP&255 SCREEN_TOP>>8 $28 $00 $19 $00
+peek xram:XRAM_CFG_CHARS+2 $00 $00 SCREEN_TOP&255 SCREEN_TOP>>8 $28 $00 $19 $00
+
+# The font is the Amiga's, stored row-major as mode 1 reads it,
+# font[row * 256 + glyph], with codes 128-255 drawn inverted.
+peek xram:XRAM_FONT+1 $7E
+peek xram:XRAM_FONT+129 $81
+
+# The palettes are built from the Amiga's at boot: the tiles' black is opaque,
+# 0 is transparent for everything drawn over them, and the player's outline is
+# black in the entry his frames leave free, 8. The robots' palette is 2.1's
+# unit palette with its 2 and 5 swapped: black at 1, white at 2, 457 at 5.
+peek xram:XRAM_PAL_GAME $20 $00
+peek xram:XRAM_PAL_A $00 $00
+peek xram:XRAM_PAL_A+8*2 $20 $00
+peek xram:XRAM_PAL_B+1*2 $20 $00
+peek xram:XRAM_PAL_B+2*2 $FF $FF
+peek xram:XRAM_PAL_B+5*2 $A8 $72
+
+# The probe block is the durable state assertion: a fixed XRAM address, so it
+# does not move when the linker rearranges RAM. 'P','R', playing, level a,
+# player at 22,38, and the window centred on him at 17,35.
+peek xram:XRAM_PROBE $50 $52 $02 $00 $16 $26
+peek xram:XRAM_PROBE+PROBE_WINDOW_X $11 $23
+
+# Anchor the frame on the AI's own clock rather than on `run 60`. How long
+# booting takes depends on the host filesystem, so counting frames from the
+# console line is not the same measurement on every machine.
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_AI60
+
+# One frame for a person to look at, in build/<preset>/test/emu.bringup/.
+shot "bringup.png"

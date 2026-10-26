@@ -1,0 +1,98 @@
+# The elevator panel.
+#
+# Written during M6 and never tested, because no level puts an elevator anywhere
+# a script can walk to: every one of the thirty-three in the eighteen maps is
+# behind a locked door, and the shafts themselves are not walkable terrain.
+# poke gets past that by putting the player where the game would have put him.
+#
+# ELEVATOR_PANEL triggers on the player standing at the elevator's X and one row
+# ABOVE it -- x16Robots.ASM ELPN1 does UNIT_LOC_Y[elevator] - 1 and compares.
+# level-e's elevator slot 41 is at 52,24 with four floors and the car on floor
+# 1, so the player goes to 52,23.
+#
+# Names such as UNIT_TYPE and XRAM_PROBE come from robots.sym, which the build
+# writes beside the ROM: RAM symbols move whenever the code above them changes
+# size, and XRAM ones whenever xram_layout_t in src/xram.h changes.
+#
+# The panel is drawn where the Amiga draws it, on the console's bottom row, 24,
+# from column 6, which is XRAM_CHARS+24*SCR_STRIDE+6*2, two bytes per cell, in
+# the console's green ($89). The car's floor is shown inverted, which the font
+# does for any code with the top bit set.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press k
+run 6
+release k
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press space
+run 6
+release space
+run 10
+press i
+run 6
+release i
+run 10
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_PLAY
+run 20
+
+# Stand him at 52,23. The nudge down and back up is what makes the game redraw
+# the window around him and lets the elevator's AI see him arrive.
+poke UNIT_LOC_X $34
+poke UNIT_LOC_Y $17
+press k
+run 8
+release k
+run 8
+press i
+run 8
+release i
+run 90
+
+# Four floors offered, the car's own floor inverted: $B1 for 1.
+peek xram:XRAM_CHARS+24*SCR_STRIDE+6*2 $B1 $89 $32 $89 $33 $89 $34 $89
+
+# Right twice, and the highlight walks up with it.
+press l
+run 8
+release l
+run 20
+peek xram:XRAM_CHARS+24*SCR_STRIDE+6*2 $31 $89 $B2 $89 $33 $89 $34 $89
+press l
+run 8
+release l
+run 20
+peek xram:XRAM_CHARS+24*SCR_STRIDE+6*2 $31 $89 $32 $89 $B3 $89 $34 $89
+
+# Left comes back down. It stops at 1 and at the top, which is why the panel
+# never offers a floor the shaft does not have.
+press j
+run 8
+release j
+run 20
+peek xram:XRAM_CHARS+24*SCR_STRIDE+6*2 $31 $89 $B2 $89 $33 $89 $34 $89
+
+# Down leaves: the digits are cleared and the player is put out at the chosen
+# floor -- slot 38 is that shaft's floor 2 at 7,12, and he arrives one above it
+# at 7,11, which is where the panel expects a player to be standing.
+press k
+run 8
+release k
+run 40
+peek xram:XRAM_CHARS+24*SCR_STRIDE+6*2 $20 $89 $20 $89 $20 $89 $20 $89
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $07 $0B

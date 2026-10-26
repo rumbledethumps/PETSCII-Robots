@@ -1,0 +1,76 @@
+# What a search gives, and only that.
+#
+# SEARCH_OBJECT gives a pistol's ammunition, a plasma gun's, medkits or magnets,
+# then, in the original, goes on into the next kind's CMP with whatever A the
+# display routine left: the X16 and the PET fall through from all three of the
+# first. src/game/items.s returns instead. While that A never matches, nothing
+# shows the difference -- tests/source/verify_source.py checks the
+# returns are there -- so this holds what each find gives: its own, and
+# nothing of the kinds after it.
+#
+# level-a hides a hundred rounds for the pistol in slot 51, at 20,36, whose
+# search box reaches the crate one square up from 21,38. tests/emu/search.txt
+# finds it. Here the slot is hidden again as each of the other three kinds,
+# with the same hundred, and searched again.
+
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_MENU
+run 30
+press space
+run 6
+release space
+wait xram:XRAM_PROBE+PROBE_CHECK PROBE_AT_AI60
+
+# Nothing yet: pistol and plasma rounds, bombs, EMPs, medkits, magnets.
+peek AMMO_PISTOL $00 $00 $00 $00 $00 $00
+
+# One square left, to x=21, and search up.
+press j
+run 6
+release j
+run 20
+peek xram:XRAM_PROBE+PROBE_PLAYER_X $15 $26
+press z
+run 6
+release z
+run 10
+press i
+run 6
+release i
+run 200
+peek AMMO_PISTOL $64 $00 $00 $00 $00 $00
+
+# A plasma gun.
+poke UNIT_TYPE+51 $84
+press z
+run 6
+release z
+run 10
+press i
+run 6
+release i
+run 200
+peek AMMO_PISTOL $64 $64 $00 $00 $00 $00
+
+# Medkits.
+poke UNIT_TYPE+51 $85
+press z
+run 6
+release z
+run 10
+press i
+run 6
+release i
+run 200
+peek AMMO_PISTOL $64 $64 $00 $00 $64 $00
+
+# Magnets.
+poke UNIT_TYPE+51 $86
+press z
+run 6
+release z
+run 10
+press i
+run 6
+release i
+run 200
+peek AMMO_PISTOL $64 $64 $00 $00 $64 $64
